@@ -10,6 +10,13 @@ requires the input CSV filename to be structured:
 timestamp.servername[.something].csv
 ```
 
+You can fetch the stats by enabling the statistics backend in haproxy and
+fetching data via curl:
+
+```
+curl -s -o "$(date +%s).haproxy.sample.csv" 'http://haproxy/admin?stats;csv;norefresh'
+```
+
 Each line of output may be sent to elasticsearch via a POST request.
 
 ### Caveats
