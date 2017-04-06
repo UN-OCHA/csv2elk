@@ -23,9 +23,14 @@ if (!file_exists($file)) {
 }
 
 // Grab the timestamp and server name from the filename.
-$temp = explode('.', $file);
+$temp = explode('.', basename($file));
 if (count($temp) < 3) {
   die("Expecting a file named timestamp.servername.[something].csv");
+}
+
+// Load the config from the ini file if it exists.
+if (file_exists('config.ini')) {
+  $config = parse_ini_file('config.ini');
 }
 
 // Oh, yes... set this. Your LBs are set to UTC are they not?
@@ -33,6 +38,9 @@ date_default_timezone_set('UTC');
 
 // Mangle the timestamp, so that Kibana sees it as date/time.
 $timestamp = strftime("%Y-%m-%dT%T.000Z", (int)$temp[0]);
+
+// Extract the hostname.
+$host = $temp[1];
 
 /**
  * We have what we need. Parse it.
@@ -75,7 +83,7 @@ while (!feof($fp)) {
   $data = [
     '@timestamp' => $timestamp,
     '@version'   => SCHEMA_VERSION,
-    'host'       => $temp[1],
+    'host'       => $host,
     'type'       => 'stat',
   ];
 
@@ -95,7 +103,32 @@ while (!feof($fp)) {
 // Close it.
 fclose($fp);
 
+
 // Loop through the output array and dump each element as a JSON object.
-foreach ($output as $stat) {
-  printf("%s\n", json_encode($stat));
+
+// If a config file exists and defines an elasticsearch instance, send the
+// data there. Otherwise, dump it to stdout.
+if (isset($config['output']) && $config['output'] == 'elasticsearch') {
+  // Create an index.
+  $index = strftime("stats-%Y.%m.%d", (int)$temp[0]);
+
+  // Create the URI.
+  $uri = $config['elasticsearch'] . '/' . $index . '/stat';
+
+  // Post each item to ES.
+  foreach ($output as $stat) {
+    $data = json_encode($stat);
+
+    $ch = curl_init($uri);
+    curl_setopt($ch, CURLOPT_CUSTOMREQUEST, "POST");
+    curl_setopt($ch, CURLOPT_POSTFIELDS, $data);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json', 'Content-Length: ' . strlen($data)]);
+    $result = curl_exec($ch);
+  }
+}
+else {
+  foreach ($output as $stat) {
+    printf("%s\n", json_encode($stat));
+  }
 }

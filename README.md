@@ -1,4 +1,4 @@
-## CSV2JSON
+## CSV2ELK
 
 This is a sutility specifically to convert haproxy csv stats to something
 that can be thrown at elasticsearch, so that Kibana may play with it.
@@ -17,7 +17,22 @@ fetching data via curl:
 curl -s -o "$(date +%s).haproxy.sample.csv" 'http://haproxy/admin?stats;csv;norefresh'
 ```
 
-Each line of output may be sent to elasticsearch via a POST request.
+### Output
+
+Each line of output may be sent to elasticsearch via a POST request or the
+utility can post it for you. Output is controlled via a setting in the file
+named config.ini, which has two configurable options:
+
+ * output: String. If set to `elasticsearch` will cause the utility to write
+   its results to a configured ES instance, anyting else to stdout.
+ * elasticsearch: URL of a configured ES instance.
+
+```
+[global]
+; output = stdout
+output = elasticsearch
+elasticsearch = http://127.0.0.1:9200
+```
 
 ### Caveats
 
