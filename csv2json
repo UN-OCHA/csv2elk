@@ -1,0 +1,101 @@
+#!/usr/bin/php
+<?php
+/**
+ * Converts a HAPROXY stats CSV to logstash JSON.
+ *
+ * This allows data from the stats CSV to be posted directory to an
+ * elasticsearch index, for analysis with Kibana.
+ *
+ * The expected CSV input file name is timestamp.servername.[something].csv.
+ */
+
+define('SCHEMA_VERSION', 1);
+
+// Did we get passed a filename?
+if ($_SERVER['argc'] < 2 || $_SERVER['argc'] > 2) {
+  die("Usage: csv2json filename");
+}
+
+// Ok, does the file exist?
+$file = $_SERVER['argv'][1];
+if (!file_exists($file)) {
+  die("File '{$file}' does not exist");
+}
+
+// Grab the timestamp and server name from the filename.
+$temp = explode('.', $file);
+if (count($temp) < 3) {
+  die("Expecting a file named timestamp.servername.[something].csv");
+}
+
+// Oh, yes... set this. Your LBs are set to UTC are they not?
+date_default_timezone_set('UTC');
+
+// Mangle the timestamp, so that Kibana sees it as date/time.
+$timestamp = strftime("%Y-%m-%dT%T.000Z", (int)$temp[0]);
+
+/**
+ * We have what we need. Parse it.
+ *
+ * Start with the header line and remove the empty last field.
+ */
+$fp = fopen($file, "r");
+if (!$fp) {
+  die("Unable to open file '{$file}'");
+}
+
+$headers = fgetcsv($fp, 1024);
+array_pop($headers);
+
+// A little bit of mangling to remove the comment from the start.
+foreach ($headers as &$header) {
+  $header = strtr($header, ['# ' => '']);
+  if ($header == 'type') {
+    $header = 'htype';
+  }
+}
+reset($headers);
+
+// Assemble an output array.
+$output = [];
+
+// Read the stats line by line.
+while (!feof($fp)) {
+  $line = fgetcsv($fp, 1024);
+
+  // Deal with empty lines.
+  if (!is_array($line)) {
+    continue;
+  }
+
+  // Remove empty last field.
+  array_pop($line);
+
+  // Add some extra metadata fields.
+  $data = [
+    '@timestamp' => $timestamp,
+    '@version'   => SCHEMA_VERSION,
+    'host'       => $temp[1],
+    'type'       => 'stat',
+  ];
+
+  // Add each data field to the output array, indexed with the column name.
+  // Ensure that numbers remain numbers.
+  foreach ($line as $i => $item) {
+    if (is_numeric($item)) {
+      $data[$headers[$i]] = floatval($item);
+    }
+    else {
+      $data[$headers[$i]] = $item;
+    }
+  }
+  $output[] = $data;
+}
+
+// Close it.
+fclose($fp);
+
+// Loop through the output array and dump each element as a JSON object.
+foreach ($output as $stat) {
+  printf("%s\n", json_encode($stat));
+}
