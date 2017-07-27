@@ -13,7 +13,7 @@ define('SCHEMA_VERSION', 1);
 
 // Did we get passed a filename?
 if ($_SERVER['argc'] < 2 || $_SERVER['argc'] > 2) {
-  die("Usage: csv2json filename");
+  die("Usage: csv2elk filename");
 }
 
 // Ok, does the file exist?
@@ -120,6 +120,9 @@ if (isset($config['output']) && $config['output'] == 'elasticsearch') {
     $data = json_encode($stat);
 
     $ch = curl_init($uri);
+    if (!empty($config['username']) && !empty($config['password'])) {
+      curl_setopt($ch, CURLOPT_USERPWD, $config['username'] . ':' . $config['password']);
+    }
     curl_setopt($ch, CURLOPT_CUSTOMREQUEST, "POST");
     curl_setopt($ch, CURLOPT_POSTFIELDS, $data);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, TRUE);
