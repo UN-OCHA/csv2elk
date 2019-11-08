@@ -134,8 +134,123 @@ if (isset($config['output']) && $config['output'] == 'elasticsearch') {
     printf("%s: %d %s\n", $info['url'], $info['http_code'], ($info['http_code'] >= 299) ? 'ERROR' : 'OK');
   }
 }
+else if (isset($config['output']) && $config['output'] == 'metricbeat') {
+  // Create an index.
+  $index = strftime("metricbeat-%Y.%m.%d", (int)$temp[0]);
+
+  // Create the URI.
+  $uri = $config['elasticsearch'] . '/' . $index . '/doc';
+
+  // Post each item to ES in the format Metricbeat would.
+  foreach ($output as $stat) {
+    $data = json_encode(metricbeat_munge($stat));
+
+    $ch = curl_init($uri);
+    if (!empty($config['username']) && !empty($config['password'])) {
+      curl_setopt($ch, CURLOPT_USERPWD, $config['username'] . ':' . $config['password']);
+    }
+    curl_setopt($ch, CURLOPT_CUSTOMREQUEST, "POST");
+    curl_setopt($ch, CURLOPT_POSTFIELDS, $data);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, TRUE);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json', 'Content-Length: ' . strlen($data)]);
+    $result = curl_exec($ch);
+    $info = curl_getinfo($ch);
+    curl_close($ch);
+
+    printf("%s: %d %s\n", $info['url'], $info['http_code'], ($info['http_code'] >= 299) ? 'ERROR' : 'OK');
+  }
+}
 else {
   foreach ($output as $stat) {
-    printf("%s\n", json_encode($stat));
+    printf("%s\n", json_encode(metricbeat_munge($stat)));
   }
+}
+
+/**
+ * Below here we have helper functions.
+ */
+
+/**
+ * Convert a straightforward (CSV) stat to a Metricbeat metricset.
+ *
+ * @param array $stat
+ *   A keyed array of statistics.
+ *
+ * @return array
+ */
+function metricbeat_munge($stat) {
+  return [
+    '@timestamp' => $stat['@timestamp'],
+    'beat' => [
+      "hostname" => $stat['host'],
+      "host" => $stat['host'],
+    ],
+    'haproxy' => [
+      'stat' => [
+        'check' => [
+          'agent.last' => $stat['last_agt'] ? $stat['last_agt'] : 0,
+          'health.last' => $stat['last_chk'] ? $stat['last_chk'] : 0,
+          'status' => $stat['check_status'],
+        ],
+        'component_type' => 0,
+        'compressor' => [
+          'bypassed.bytes' => $stat['comp_byp'],
+          'in.bytes' => $stat['comp_in'],
+          'response.bytes' => $stat['comp_rsp'],
+        ],
+        'connection' => [
+          'total' => $stat['stot'],
+        ],
+        'in.bytes' => $stat['bin'],
+        'out.bytes' => $stat['bout'],
+        'process_id' => $stat['pid'],
+        'proxy' => [
+          'id' => $stat['iid'],
+          'name' => $stat['pxname'],
+        ],
+        'queue' => [],
+        'request' => [
+          'denied' => $stat['dreq'],
+          'errors' => $stat['ereq'],
+          'rate' => [
+            'max' => $stat['req_rate_max'],
+            'value' => $stat['req_rate'],
+          ],
+          'total' => $stat['req_tot'],
+        ],
+        'response' => [
+          'denied' => $stat['dresp'],
+          'http' => [
+            '1xx' => $stat['hrsp_1xx'],
+            '2xx' => $stat['hrsp_2xx'],
+            '3xx' => $stat['hrsp_3xx'],
+            '4xx' => $stat['hrsp_4xx'],
+            '5xx' => $stat['hrsp_5xx'],
+            'other' => $stat['hrsp_other'],
+          ],
+        ],
+        'server' => [
+          'id' => $stat['sid'],
+        ],
+        'service_name' => $stat['svname'],
+        'session' => [
+          'current' => $stat['scur'],
+          'limit' => $stat['slim'],
+          'max' => $stat['smax'],
+          'rate' => [
+            'limit' => $stat['rate_lim'],
+            'max' => $stat['rate_max'],
+            'value' => $stat['rate'],
+          ],
+        ],
+        'status' => $stat['status'],
+      ],
+    ],
+    'metricset' => [
+      'host' => $stat['host'],
+      'module' => 'haproxy',
+      'name' => 'stat',
+      'rtt' => 115,
+    ],
+  ];
 }

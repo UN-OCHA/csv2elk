@@ -24,14 +24,20 @@ utility can post it for you. Output is controlled via a setting in the file
 named config.ini, which has two configurable options:
 
  * output: String. If set to `elasticsearch` will cause the utility to write
-   its results to a configured ES instance, anyting else to stdout.
+   its results to a configured ES instance. If set to `metricbeat` it will
+   write the data in a format used by the metricbeat Kibana dashboards.
+   No value or any other value writes to to stdout.
  * elasticsearch: URL of a configured ES instance.
+ * username: An ES user with sufficient write privileges.
+ * password: The password for the configured ES user.
 
 ```
 [global]
 ; output = stdout
 output = elasticsearch
 elasticsearch = http://127.0.0.1:9200
+username =
+password =
 ```
 
 ### Caveats
